@@ -16,6 +16,7 @@ func New(log *zap.Logger) *Identity {
 	}
 }
 
+// generate a private key and store it at the given path
 func (i *Identity) GeneratePrivateKey(path string) (crypto.PrivKey, error) {
 	privateKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 0)
 
@@ -32,16 +33,17 @@ func (i *Identity) GeneratePrivateKey(path string) (crypto.PrivKey, error) {
 	}
 
 	if err := os.WriteFile(path, bytes, 0400); err != nil {
-    i.log.Error("failed to write identity file",
-        zap.String("path", path),
-        zap.Error(err),
-    )
-    return nil, err
-}
+		i.log.Error("failed to write identity file",
+			zap.String("path", path),
+			zap.Error(err),
+		)
+		return nil, err
+	}
 
 	return privateKey, err
 }
 
+// attempt to read private key from a given path, if not availabe then generate it at the given path
 func (i *Identity) LoadIdentity(keyPath string) (crypto.PrivKey, error) {
 	if _, err := os.Stat(keyPath); err == nil {
 
@@ -64,6 +66,7 @@ func (i *Identity) LoadIdentity(keyPath string) (crypto.PrivKey, error) {
 	}
 }
 
+// read the private key from the given path
 func (i *Identity) ReadIdentity(path string) (crypto.PrivKey, error) {
 	bytes, err := os.ReadFile(path)
 

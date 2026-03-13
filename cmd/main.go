@@ -2,6 +2,10 @@ package main
 
 import (
 	"context"
+	"os"
+	"os/signal"
+	"syscall"
+
 	"github.com/vivek2584/hive-chat/identity"
 	"github.com/vivek2584/hive-chat/node"
 	"go.uber.org/zap"
@@ -35,4 +39,9 @@ func main() {
 		return
 	}
 
+	logger.Info("Node is running. Press CTRL-C to exit.")
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
+	<-ch
+	logger.Info("Shutting down...")
 }

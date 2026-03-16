@@ -26,7 +26,6 @@ func main() {
 	}
 
 	n.Bootstrap(ctx)
-	n.WaitForBootstrap(ctx)
 
 	err = n.StartLocalDiscovery(ctx)
 

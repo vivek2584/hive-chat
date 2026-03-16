@@ -47,14 +47,14 @@ func (n *Node) StartLocalDiscovery(ctx context.Context) error {
 				if p.ID == n.host.ID() {
 					continue
 				}
-				n.log.Info("found peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs))
+				n.log.Info("found local peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs))
 
 				if err := n.host.Connect(ctx, p); err != nil {
-					n.log.Error("failed to connect to peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs), zap.Error(err))
+					n.log.Error("failed to connect to local peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs), zap.Error(err))
 					continue
 				}
 
-				n.log.Info("connected to peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs))
+				n.log.Info("connected to local peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs))
 
 			case <-ctx.Done():
 				return
@@ -96,14 +96,14 @@ func (n *Node) StartGlobalDiscovery(ctx context.Context) error {
 						continue
 					}
 
-					n.log.Info("found peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs))
+					n.log.Info("found global peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs))
 
 					if err := n.host.Connect(ctx, p); err != nil {
-						n.log.Error("failed to connect to peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs), zap.Error(err))
+						n.log.Error("failed to connect to global peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs), zap.Error(err))
 						continue
 					}
 
-					n.log.Info("connected to peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs))
+					n.log.Info("connected to global peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs))
 
 				}
 

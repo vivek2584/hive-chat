@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
@@ -16,7 +17,10 @@ type discoveryNotifee struct {
 }
 
 func (d *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
-	d.PeerChan <- pi
+	select {
+	case d.PeerChan <- pi:
+	default:
+	}
 }
 
 func (n *Node) initMDNS() (chan peer.AddrInfo, error) {
@@ -29,6 +33,7 @@ func (n *Node) initMDNS() (chan peer.AddrInfo, error) {
 		n.log.Error("failed to start mdns service", zap.Error(err))
 		return nil, err
 	}
+	n.mdns = ser
 	return notifee.PeerChan, nil
 }
 
@@ -43,18 +48,32 @@ func (n *Node) StartLocalDiscovery(ctx context.Context) error {
 	go func() {
 		for {
 			select {
-			case p := <-peerChan:
+			case p, ok := <-peerChan:
+				if !ok {
+					return
+				}
 				if p.ID == n.host.ID() {
 					continue
 				}
-				n.log.Info("found local peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs))
-
-				if err := n.host.Connect(ctx, p); err != nil {
-					n.log.Error("failed to connect to local peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs), zap.Error(err))
+				if n.host.Network().Connectedness(p.ID) == network.Connected {
 					continue
 				}
 
-				n.log.Info("connected to local peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs))
+				n.log.Info("found local peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs))
+
+				go func(p peer.AddrInfo) {
+					dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+					defer cancel()
+					if err := n.host.Connect(dialCtx, p); err != nil {
+						n.log.Error("failed to connect to local peer",
+							zap.String("id", p.ID.String()),
+							zap.Error(err),
+						)
+						return
+					}
+					n.log.Info("connected to local peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs))
+					n.LogConnectedPeers()
+				}(p)
 
 			case <-ctx.Done():
 				return
@@ -67,7 +86,9 @@ func (n *Node) StartLocalDiscovery(ctx context.Context) error {
 
 func (n *Node) StartGlobalDiscovery(ctx context.Context) error {
 	routingDiscovery := drouting.NewRoutingDiscovery(n.idht)
-	_, err := routingDiscovery.Advertise(ctx, config.RendezvousString)
+	advCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	_, err := routingDiscovery.Advertise(advCtx, config.RendezvousString)
 
 	if err != nil {
 		n.log.Error("failed to advertise", zap.Error(err))
@@ -87,30 +108,58 @@ func (n *Node) StartGlobalDiscovery(ctx context.Context) error {
 
 				if err != nil {
 					n.log.Error("peer discovery failed", zap.Error(err))
-					time.Sleep(time.Minute)
+					select {
+					case <-time.After(10 * time.Second):
+					case <-ctx.Done():
+						return
+					}
 					continue
 				}
 
 				for p := range peerChan {
+					if ctx.Err() != nil {
+						return
+					}
+
 					if p.ID == n.host.ID() {
+						continue
+					}
+
+					if n.host.Network().Connectedness(p.ID) == network.Connected {
 						continue
 					}
 
 					n.log.Info("found global peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs))
 
-					if err := n.host.Connect(ctx, p); err != nil {
-						n.log.Error("failed to connect to global peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs), zap.Error(err))
-						continue
-					}
-
-					n.log.Info("connected to global peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs))
+					go func(p peer.AddrInfo) {
+						dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+						defer cancel()
+						if err := n.host.Connect(dialCtx, p); err != nil {
+							n.log.Error("failed to connect to global peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs), zap.Error(err))
+							return
+						}
+						n.log.Info("connected to global peer", zap.String("id", p.ID.String()), zap.Any("addresses", p.Addrs))
+						n.LogConnectedPeers()
+					}(p)
 
 				}
 
-				time.Sleep(time.Minute)
+				select {
+				case <-time.After(10 * time.Second):
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 	}()
 
 	return nil
+}
+
+func (n *Node) LogConnectedPeers() {
+	peers := n.host.Network().Peers()
+	n.log.Info("connected peers",
+		zap.Int("count", len(peers)),
+		zap.Any("peers", peers),
+	)
 }

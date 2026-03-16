@@ -83,12 +83,7 @@ func New(ctx context.Context, log *zap.Logger, id *identity.Identity) (*Node, er
 			return append(addrs, pubTCP, pubQUIC)
 		}),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
-			mode := dht.Mode(dht.ModeAuto)
-			// relay node config to configure the DHT in server mode
-			// if publicIP != "" {
-			// 	mode = dht.Mode(dht.ModeServer)
-			// }
-
+			mode := dht.Mode(dht.ModeAuto)  // change to dht.ModeServer to configure DHT in server mode
 			idht, err = dht.New(ctx, h, mode)
 			return idht, err
 		}),
